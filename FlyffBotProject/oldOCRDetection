@@ -1,0 +1,237 @@
+import time, re
+import cv2, numpy as np, pytesseract, mss
+
+from flyff_chars import MainChar, Healer
+
+healer = Healer("pipiboy", heal_slot=1, window_title="pipiboy - Flyff Universe")
+healer.hp_digits = 4
+healer.mp_digits = 4
+healer.fp_digits = 3
+
+main_char = MainChar("pipiRanger")
+main_char.hp_digits = 4
+main_char.mp_digits = 3
+main_char.fp_digits = 3
+
+# ─── OCR helpers ────────────────────────────────────────────────────────────────
+def preprocess(img: np.ndarray) -> np.ndarray:
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    scaled = cv2.resize(gray, None, fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC)
+    blur   = cv2.GaussianBlur(scaled, (3, 3), 0)
+    sharp  = cv2.addWeighted(scaled, 1.5, blur, -0.5, 0)
+    _, thr = cv2.threshold(sharp, 140, 255, cv2.THRESH_BINARY)
+    return thr
+
+def ocr(img: np.ndarray) -> str:
+    return pytesseract.image_to_string(
+        preprocess(img),
+        config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 "
+    ).strip()
+
+# ─── screen capture setup ───────────────────────────────────────────────────────
+with mss.mss() as sct:
+    mon_main = next(m for m in sct.monitors if m["width"] == 2560 and m["height"] == 1440)
+
+    base_top = mon_main["top"] + 90
+    base_left = mon_main["left"] + 200
+    line_height = 35
+    box_width = 120
+
+    hud_main = {
+        "main_HP_C":  {"left": base_left, "top": base_top + line_height * 1, "width": 50, "height": line_height},
+        "main_HP_T": {"left": base_left + 60, "top": base_top + line_height * 1, "width": 50, "height": line_height},
+        "main_MP_C":  {"left": base_left, "top": base_top + 70, "width": 50, "height": 25},
+        "main_MP_T": {"left": base_left + 65, "top": base_top + 70, "width": 50, "height": 25},
+        "main_FP_C":  {"left": base_left + 20, "top": base_top + 92, "width": 30, "height": 25},
+        "main_FP_T": {"left": base_left + 60, "top": base_top + 92, "width": 40, "height": 25},
+    }
+
+    mon_healer = next(m for m in sct.monitors if m["width"] == 1920 and m["height"] == 1080)
+
+    base_top_healer = mon_healer["top"] + 90
+    base_left_healer = mon_healer["left"] + 200
+    line_height_healer = 35
+    box_width_healer = 120
+
+    hud_healer = {
+        "healer_HP_C":  {"left": base_left_healer, "top": base_top_healer + line_height_healer * 1, "width": 50, "height": line_height_healer},
+        "healer_HP_T": {"left": base_left_healer + 60, "top": base_top_healer + line_height_healer * 1, "width": 50, "height": line_height_healer},
+        "healer_MP_C":  {"left": base_left_healer, "top": base_top_healer + 70, "width": 50, "height": 25},
+        "healer_MP_T": {"left": base_left_healer + 65, "top": base_top_healer + 70, "width": 50, "height": 25},
+        "healer_FP_C":  {"left": base_left_healer + 20, "top": base_top_healer + 92, "width": 30, "height": 25},
+        "healer_FP_T": {"left": base_left_healer + 65, "top": base_top_healer + 92, "width": 35, "height": 25},
+    }
+
+    # ── main loop ────────────────────────────────────────────────────────────
+    while True:
+        # OCR all boxes
+        raw_main = {k: ocr(np.array(sct.grab(b))) for k, b in hud_main.items()}
+
+        # Parse numeric stats
+        main_char.set_hp(raw_main["main_HP_C"], raw_main["main_HP_T"])
+        main_char.set_mp(raw_main["main_MP_C"], raw_main["main_MP_T"])
+        main_char.set_fp(raw_main["main_FP_C"], raw_main["main_FP_T"])
+
+        # Healer logic (auto-heal if its own HP<60 % and MP>10 %)
+        #main_char.tick()
+
+        # Console debug
+        print("\nMain Character")
+        print(f"🧠 HUD @{time.strftime('%H:%M:%S')}"
+              f"\n  HP: {main_char.hp_cur}/{main_char.hp_max}"
+              f" ({main_char.hp_pct()*100:0.1f} %)"
+              f"\n  MP: {main_char.mp_cur}/{main_char.mp_max}"
+              f" ({main_char.mp_pct()*100:0.1f} %)"
+              f"\n  FP: {main_char.fp_cur}/{main_char.fp_max}"
+              f" ({main_char.fp_pct()*100:0.1f} %)"              )
+
+
+        raw_healer = {k: ocr(np.array(sct.grab(b))) for k, b in hud_healer.items()}
+
+        healer.set_hp(raw_healer["healer_HP_C"], raw_healer["healer_HP_T"])
+        healer.set_mp(raw_healer["healer_MP_C"], raw_healer["healer_MP_T"])
+        healer.set_fp(raw_healer["healer_FP_C"], raw_healer["healer_FP_T"])
+
+        healer.tick()
+
+        print("\nHealer Character")
+        print(f"🧠 HUD @{time.strftime('%H:%M:%S')}"
+              f"\n  HP: {healer.hp_cur}/{healer.hp_max}"
+              f" ({healer.hp_pct()*100:0.1f} %)"
+              f"\n  MP: {healer.mp_cur}/{healer.mp_max}"
+              f" ({healer.mp_pct()*100:0.1f} %)"
+              f"\n  FP: {healer.fp_cur}/{healer.fp_max}"
+              f" ({healer.fp_pct() * 100:0.1f} %)")
+
+        if main_char.hp_pct() < 0.90 or main_char.hp_cur > main_char.hp_max:
+            healer.press_key("1")
+
+        #time.sleep(1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# flyff_chars.py
+import re
+from abc import ABC, abstractmethod
+import pydirectinput
+import win32gui
+import win32con
+import time
+
+class CharacterBase(ABC):
+    """
+    Common stats + helpers shared by MainChar and Healer.
+    All numbers stay as ints for easy math.
+    """
+    def __init__(self, name: str, hp_digits=4, mp_digits=4, fp_digits=3):
+        self.name   = name
+        self.hp_cur = self.hp_max = 0
+        self.mp_cur = self.mp_max = 0
+        self.fp_cur = self.fp_max = 0
+
+        # digit length constraints
+        self.hp_digits = hp_digits
+        self.mp_digits = mp_digits
+        self.fp_digits = fp_digits
+
+    # ── getters --------------------------------------------------------------
+    def hp_pct(self) -> float: return self.hp_cur / self.hp_max if self.hp_max else 0
+    def mp_pct(self) -> float: return self.mp_cur / self.mp_max if self.mp_max else 0
+    def fp_pct(self) -> float: return self.fp_cur / self.fp_max if self.fp_max else 0
+
+    # ── setters / updaters ---------------------------------------------------
+    def _trim(self, s: str, maxlen: int) -> str:
+        """Keep only digits and clip to length."""
+        return re.sub(r"\D", "", s)[:maxlen]
+
+    def set_hp(self, cur_raw: str, max_raw: str):
+        self.hp_cur = int(self._trim(cur_raw, self.hp_digits) or 0)
+        self.hp_max = int(self._trim(max_raw, self.hp_digits) or 1)  # avoid div-by-zero
+
+    def set_mp(self, cur_raw: str, max_raw: str):
+        self.mp_cur = int(self._trim(cur_raw, self.mp_digits) or 0)
+        self.mp_max = int(self._trim(max_raw, self.mp_digits) or 1)
+
+    def set_fp(self, cur_raw: str, max_raw: str):
+        self.fp_cur = int(self._trim(cur_raw, self.fp_digits) or 0)
+        self.fp_max = int(self._trim(max_raw, self.fp_digits) or 1)
+
+    # ── keyboard helpers -----------------------------------------------------
+    def press_key(self, key: str):
+        """Press a single key (wrapper, so we can stub during tests)."""
+        pydirectinput.press(key)
+
+    # virtual “action bar” – override if your classes differ
+    def action_slot(self, slot: int):
+        """Press 1-9 on the action bar."""
+        if 1 <= slot <= 9:
+            self.press_key(str(slot))
+
+    def find_window_by_title(self, partial_title: str):
+        """Find a window handle by a partial match on its title."""
+        matches = []
+
+        def enum_cb(hwnd, _):
+            if win32gui.IsWindowVisible(hwnd):
+                title = win32gui.GetWindowText(hwnd)
+                if partial_title.lower() in title.lower():
+                    matches.append(hwnd)
+
+        win32gui.EnumWindows(enum_cb, None)
+        return matches[0] if matches else None
+
+    # subclasses must implement their own tick() loop
+    @abstractmethod
+    def tick(self):
+        """Called every HUD refresh – decide what to do."""
+
+# ──────────────────────────────────────────────────────────────────────────────
+class MainChar(CharacterBase):
+    """The DPS / monster-killer."""
+
+    def tick(self):
+        return
+
+
+class Healer(CharacterBase):
+    def __init__(self, name: str, heal_slot: int = 1, window_title: str = None):
+        super().__init__(name)
+        self.heal_slot = heal_slot
+        self.window_title = window_title
+        self._hwnd = None
+
+    def press_key(self, key: str):
+        if self.window_title:
+            hwnd = self._hwnd or self.find_window_by_title(self.window_title)
+            if hwnd:
+                try:
+                    win32gui.SetForegroundWindow(hwnd)
+                    self._hwnd = hwnd  # cache it
+                    time.sleep(0.05)  # short pause helps ensure input lands
+                except Exception as e:
+                    print(f"[WARN] Could not focus window: {e}")
+        super().press_key(key)
+
+    def tick(self):
+        return
