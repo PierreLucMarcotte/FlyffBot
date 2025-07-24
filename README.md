@@ -18,6 +18,7 @@ FlyffBot is a lightweight automation assistant for **Flyff Universe**, built in 
 - 🧙 Healer class casts heals and buffs based on player's HP
 - ⚔️ Monster defeat detection using HUD red/blue bars
 - ⏱️ Prevents premature retargeting with cooldowns
+- Automatic object pick up after defeating monster
 
 ## ⚙️ Requirements
 
