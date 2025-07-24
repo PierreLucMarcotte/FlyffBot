@@ -32,7 +32,43 @@ class CharacterBase(ABC):
 # ──────────────────────────────────────────────────────────────────────────────
 class MainChar(CharacterBase):
     """DPS / tanker"""
-    def tick(self): pass
+    def __init__(self, name: str, pickup_key: str = '0', window_title: str | None = None):
+        super().__init__(name)
+        self.pickup_key = pickup_key
+        self.window_title = window_title
+        self._hwnd = None
+        self.can_pick_objects = False
+        self.last_pickup = 0
+        self.pickup_cooldown = 0.5
+
+    def press_key(self, key: str):
+        if self.window_title:
+            if self._hwnd is None:
+                self._hwnd = self._find_window(self.window_title)
+            if self._hwnd:
+                try:
+                    win32gui.SetForegroundWindow(self._hwnd)
+                    time.sleep(0.05)
+                except Exception:
+                    self._hwnd = None
+        super().press_key(key)
+
+    @staticmethod
+    def _find_window(partial_title: str):
+        handle = None
+        def cb(hwnd, _):
+            nonlocal handle
+            if win32gui.IsWindowVisible(hwnd):
+                if partial_title.lower() in win32gui.GetWindowText(hwnd).lower():
+                    handle = hwnd
+        win32gui.EnumWindows(cb, None)
+        return handle
+
+    def tick(self):
+        if self.can_pick_objects and time.time() - self.last_pickup > self.pickup_cooldown:
+            self.press_key(self.pickup_key)
+            self.last_pickup = time.time()
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 class Healer(CharacterBase):

@@ -6,11 +6,11 @@ import pyautogui
 from flyff_chars import MainChar, Healer
 
 # ── characters ───────────────────────────────────────────────────────────────
-main_char = MainChar("pipiRanger")
+main_char = MainChar("pipiRanger", pickup_key='0', window_title="pipiRanger - Flyff Universe")
 healer = Healer("pipiboy", heal_slot=1, buff_slot='c', window_title="pipiboy - Flyff Universe")
 
 # Monster SubSystem
-cooldown = 6
+cooldown = 5
 cooldown_until = 0
 
 has_clicked = False
@@ -70,7 +70,7 @@ def pct_from_right(img, color):
 
 # ── async OCR monster detector ───────────────────────────────────────────────
 def scan_for_enemies(target_names=None):
-    global cooldown_until, has_clicked, in_fight
+    global cooldown_until, has_clicked, in_fight, can_pick_objects
     SCAN_BOX = {
         "left": 100,
         "top": 300,
@@ -86,6 +86,8 @@ def scan_for_enemies(target_names=None):
                     time.sleep(0.1)
                     continue
                 print("Ready to fight!")
+
+                main_char.can_pick_objects = False  # ✅ stop pickup
 
                 has_clicked = False
 
@@ -105,8 +107,8 @@ def scan_for_enemies(target_names=None):
                     for name in target_names or []:
                         if name.lower() in text.lower():
                             # Compute position in screen coordinates
-                            x = SCAN_BOX["left"] + data["left"][i] + data["width"][i] // 2
-                            y = SCAN_BOX["top"] + data["top"][i] + data["height"][i] + 50  # 30 px below text
+                            x = SCAN_BOX["left"] + data["left"][i] + data["width"][i] // 2 - 40
+                            y = SCAN_BOX["top"] + data["top"][i] + data["height"][i] + 80  # 30 px below text
 
                             print(f"\n👾 Enemy spotted: {text} — clicking at ({x}, {y})")
 
@@ -115,7 +117,7 @@ def scan_for_enemies(target_names=None):
 
                             has_clicked = True
 
-                            break17c11
+                            break
                     else:
                         continue
                     break
@@ -131,6 +133,15 @@ threading.Thread(
 ).start()
 
 
+def pickup_loop():
+    while True:
+        main_char.tick()
+        time.sleep(0.1)  # adjust if needed
+
+
+threading.Thread(target=pickup_loop, daemon=True).start()
+
+
 with mss.mss() as sct:
     try:
         while True:
@@ -142,7 +153,10 @@ with mss.mss() as sct:
                 print("✅ In FIGHT — HUD appeared")
                 cooldown_until = time.time() + cooldown  # ⏱ wait before scanning new targets
             else:
-                print("X NOT In FIGHT — HUD disappeared")
+                if in_fight:
+                    main_char.can_pick_objects = True  # ✅ trigger pickup
+                    print("X NOT In FIGHT ANYMORE — HUD disappeared")
+
                 in_fight = False
 
             start = time.perf_counter()
