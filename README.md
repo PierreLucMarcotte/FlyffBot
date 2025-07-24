@@ -51,7 +51,7 @@ Or download from: https://github.com/UB-Mannheim/tesseract/wiki
 In `Main.py`, modify the line:
 
 python
-```healer = Healer("HealerName", heal_slot=1, buff_slot='c', window_title="pipiboy - Flyff Universe")```
+```healer = Healer("HealerName", heal_slot=1, buff_slot='c', window_title="HealerName - Flyff Universe")```
 
 
 🔭 Roadmap
